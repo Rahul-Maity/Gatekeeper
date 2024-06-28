@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34714.143
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Gatekeeper", "Gatekeeper.csproj", "{A845C5BB-638C-4784-A780-C3950FA78F24}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A845C5BB-638C-4784-A780-C3950FA78F24}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A845C5BB-638C-4784-A780-C3950FA78F24}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A845C5BB-638C-4784-A780-C3950FA78F24}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A845C5BB-638C-4784-A780-C3950FA78F24}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {67A0E676-2E2D-4233-81F5-B151D72F789F}
+	EndGlobalSection
+EndGlobal

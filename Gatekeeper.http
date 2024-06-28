@@ -1,0 +1,6 @@
+@Gatekeeper_HostAddress = http://localhost:5263
+
+GET {{Gatekeeper_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
