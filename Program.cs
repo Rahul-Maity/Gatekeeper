@@ -6,9 +6,9 @@ using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
-
-builder.Services.AddAuthentication("cookie")
-    .AddCookie("cookie");
+const string authScheme = "cookie";
+builder.Services.AddAuthentication(authScheme)
+    .AddCookie(authScheme);
 
 var app = builder.Build();
 
@@ -16,10 +16,32 @@ var app = builder.Build();
 
 app.UseAuthentication();
 
-app.MapGet("/username", (HttpContext ctx, IDataProtectionProvider idp) =>
+app.MapGet("/username", (HttpContext ctx) =>
 {
 
-    return ctx.User.FindFirst("usr").Value;
+    return ctx.User.FindFirst("usr").Value ?? "empty";
+});
+
+
+//auth endpoint
+
+app.MapGet("/sweden", (HttpContext ctx) =>
+{
+    if(!ctx.User.Identities.Any(x => x.AuthenticationType == authScheme))
+    {
+        ctx.Response.StatusCode = 401;
+        return "";
+    }
+
+    if(!ctx.User.HasClaim("passport_type","eur"))
+    {
+        ctx.Response.StatusCode = 403;
+        return "";
+    }
+
+    return "allowed";
+
+   
 });
 
 
@@ -28,9 +50,10 @@ app.MapGet("/login",async (HttpContext ctx) =>
 
     var claims = new List<Claim>();
     claims.Add(new Claim("usr","anton"));
-    var identity = new ClaimsIdentity(claims,"cookie");
+    claims.Add(new Claim("passport_type", "eur"));
+    var identity = new ClaimsIdentity(claims,authScheme);
     var user = new ClaimsPrincipal(identity);
-    await ctx.SignInAsync("cookie",user);
+    await ctx.SignInAsync(authScheme,user);
     return "ok";
 });
 
