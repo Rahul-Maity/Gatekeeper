@@ -15,6 +15,11 @@ app.Use(async
     (ctx, next) =>
 {
     var idp = ctx.RequestServices.GetRequiredService<IDataProtectionProvider>();
+    if(ctx.Request.Path.StartsWithSegments("/login"))
+    {
+        await next();
+        return;
+    }
     if (!ctx.Request.Cookies.TryGetValue("auth", out var authCookie))
     {
         ctx.Response.StatusCode = 401;
@@ -63,7 +68,7 @@ app.Use(async
 app.MapGet("/username", (HttpContext ctx, IDataProtectionProvider idp) =>
 {
 
-    return ctx.User;
+    return ctx.User.FindFirst("usr").Value;
 });
 
 
@@ -73,7 +78,7 @@ app.MapGet("/login", (authService auth) =>
     return "ok";
 });
 
-app.UseHttpsRedirection();
+app.UseHttpsRedirection();  
 
 
 
