@@ -33,7 +33,7 @@ builder.Services.AddAuthorization(b =>
 {
     b.AddPolicy("customer", p =>
     {
-        p.AddAuthenticationSchemes("visitor", "local")
+        p.AddAuthenticationSchemes("patreon-cookie","visitor", "local")
         .RequireAuthenticatedUser();
     });
     b.AddPolicy("user", p =>
@@ -74,7 +74,10 @@ app.MapGet("/login-local", async (ctx) =>
 app.MapGet("/login-patreon", async (ctx) =>
 {
 
-    await ctx.ChallengeAsync("external-patreon");
+    await ctx.ChallengeAsync("external-patreon", new AuthenticationProperties()
+    {
+        RedirectUri = "/"
+    }) ; 
 
 
 }).RequireAuthorization("user");
