@@ -1,49 +1,37 @@
+
+
+using Gatekeeper;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Options;
-using System.IO;
-using System.Runtime.Intrinsics.Arm;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore.Storage;
 using System.Security.Claims;
-using System.Text.Encodings.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton<Gatekeeper.Database>();
 
+builder.Services.AddSingleton<IPasswordHasher<User>,PasswordHasher<User>>();
 
-builder.Services.AddAuthentication()
-    .AddScheme<CookieAuthenticationOptions,visitorAuthHandler>("visitor", o => { })
-    .AddCookie("local")
-    .AddCookie("patreon-cookie")
-    .AddOAuth("external-patreon", o =>
-    {
-        o.SignInScheme = "patreon-cookie";
-        o.ClientId = "id";
-        o.ClientSecret = "secret";
-        o.AuthorizationEndpoint = "https://oauth.wiremockapi.cloud/oauth/authorize";
-        o.TokenEndpoint = "https://oauth.wiremockapi.cloud/oauth/token";
-        o.UserInformationEndpoint = "https://oauth.wiremockapi.cloud/userinfo";
-        o.CallbackPath = "/cb-patreon";
-        o.Scope.Add("profile");
-        o.SaveTokens = true;
-    });
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme);
 
-builder.Services.AddAuthorization(b =>
+builder.Services.AddAuthorization(builder =>
 {
-    b.AddPolicy("customer", p =>
+    builder.AddPolicy("manager", pb =>
     {
-        p.AddAuthenticationSchemes("patreon-cookie","visitor", "local")
-        .RequireAuthenticatedUser();
-    });
-    b.AddPolicy("user", p =>
-    {
-        p.AddAuthenticationSchemes("local")
-        .RequireAuthenticatedUser();
+        pb.RequireAuthenticatedUser()
+        .AddAuthenticationSchemes(CookieAuthenticationDefaults.AuthenticationScheme)
+        .RequireClaim("role", "manager");
     });
 });
 
-builder.Services.AddControllers();
+
+
+builder.Services.AddIdentity<IdentityUser, IdentityRole>()
+    .AddDefaultTokenProviders();
 
 
 
@@ -51,41 +39,141 @@ var app = builder.Build();
 
 
 
-app.UseAuthentication();
 
+
+app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/", ctx => Task.FromResult("hello world")).RequireAuthorization("customer");
 
-app.MapGet("/login-local", async (ctx) =>
+
+
+app.MapGet("/", () => "Hello World");
+app.MapGet("/protected", () => "somthing super secret").RequireAuthorization("manager");
+app.MapGet("/test", (
+    UserManager<IdentityUser> userMgr,
+    SignInManager<IdentityUser>signMgr
+
+    ) =>
 {
-
-    var claims = new List<Claim>();
-    claims.Add(new Claim("user", "anton"));
-    var identity = new ClaimsIdentity(claims, "local");
-
-    var user = new ClaimsPrincipal(identity);
-
-    await ctx.SignInAsync("local", user);
-    
+    //signMgr.PasswordSignInAsync();
 
 });
 
-app.MapGet("/login-patreon", async (ctx) =>
+
+app.MapGet("/register", async (
+    string username,
+    string password,
+    IPasswordHasher<User> hasher,
+    Gatekeeper.Database db,
+    HttpContext ctx
+    ) =>
 {
+    var user = new User() { Username = username };
+    user.PasswordHash = hasher.HashPassword(user, password);
+    await db.Putasync(user);
 
-    await ctx.ChallengeAsync("external-patreon", new AuthenticationProperties()
+    await ctx.SignInAsync(
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        userHelper.Convert(user)
+        );
+
+    return user;
+});
+
+
+
+
+
+
+app.MapGet("/login", async (
+    string username,
+    string password,
+    IPasswordHasher<User> hasher,
+    Gatekeeper.Database db,
+    HttpContext ctx
+    ) =>
+{
+    var user = await db.GetUserAsync(username);
+   var result=  hasher.VerifyHashedPassword(user, user.PasswordHash, password);
+    if(result == PasswordVerificationResult.Failed)
     {
-        RedirectUri = "/"
-    }) ; 
+        return "bad credentials";
+    }
+    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, userHelper.Convert(user));
+    return "logged in";
+
+    
+});
 
 
-}).RequireAuthorization("user");
+
+
+
+app.MapGet("/promote", async (
+    string username,
+ 
+    Gatekeeper.Database db
+  
+    ) =>
+{
+    var user = await db.GetUserAsync(username);
+
+    user.Claims.Add(new UserClaim() { Type = "role", Value = "manager" });
+
+    await db.Putasync(user);
+
+    return "promoted";
+
+
+});
+
+//routes for password reset
+
+app.MapGet("/start-password-reset", async (
+    string username,
+
+    Gatekeeper.Database db,
+    IDataProtectionProvider provider
+
+    ) =>
+{
+    var protector = provider.CreateProtector("PasswordReset");
+    var user = await db.GetUserAsync(username);
+    return protector.Protect(user.Username);
+
+
+});
+
+
+app.MapGet("/end-password-reset", async (
+    string username,
+    string password,
+    string hash,
+    Gatekeeper.Database db,
+    IPasswordHasher<User>hasher,
+    IDataProtectionProvider provider
+
+    ) =>
+{
+    var protector = provider.CreateProtector("PasswordReset");
+    var hashUsername = protector.Unprotect(hash);
+    if(hashUsername != username)
+    {
+        return "bad hash";
+    }
+    var user=await db.GetUserAsync(username);
+    user.PasswordHash = hasher.HashPassword(user, password);
+    await db.Putasync(user);
+    return "password reset";
+  
+
+
+});
 
 
 
 app.UseHttpsRedirection();
-app.MapControllers();
+
 
 
 
@@ -94,30 +182,20 @@ app.Run();
 
 
 
-
-public class visitorAuthHandler : CookieAuthenticationHandler
+public class userHelper()
 {
-    public visitorAuthHandler(IOptionsMonitor<CookieAuthenticationOptions> options, ILoggerFactory logger, UrlEncoder encoder, ISystemClock clock) : base(options, logger, encoder, clock)
+    public static ClaimsPrincipal Convert(User user)
     {
+        var claims = new List<Claim>() { 
+            new Claim("username",user.Username),
+        };
 
-    }
-
-    protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
-    {
-        var result = await base.HandleAuthenticateAsync();
-        if(result.Succeeded)
-        {
-            return result;
-        }
-        var claims = new List<Claim>();
-        claims.Add(new Claim("user", "anton"));
-        var identity = new ClaimsIdentity(claims, "visitor");
-
-        var user = new ClaimsPrincipal(identity);
-
-        Context.SignInAsync("visitor", user);
-        return AuthenticateResult.Success(new AuthenticationTicket(user,"visitor"));
+        claims.AddRange(user.Claims.Select(x => new Claim(x.Type, x.Value )));
 
 
+        var identity = new ClaimsIdentity(claims,CookieAuthenticationDefaults.AuthenticationScheme);
+
+        return new ClaimsPrincipal(identity);
     }
 }
+
