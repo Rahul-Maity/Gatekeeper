@@ -1,43 +1,76 @@
 
 
-using Microsoft.AspNetCore.Authentication;
 using System.Security.Claims;
 
-var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddControllers();
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http.HttpResults;
 
-builder.Services.AddAuthentication()
-    .AddCookie("Default", o =>
+using StackExchange.Redis;
+
+var builder = WebApplication.CreateBuilder(args);
+
+
+#region Data-Protection
+
+//below configuration aimed for sharing keys to use already setup cookie in localhost in other instances
+
+var con = "127.0.0.1:5263";
+
+var redis = ConnectionMultiplexer.Connect(con);
+
+
+builder.Services.AddDataProtection()
+    .PersistKeysToStackExchangeRedis(redis,"DataProtection-Key")
+    .SetApplicationName("unique");
+
+
+#endregion
+
+builder.Services.AddAuthorization();
+
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, o =>
     {
-        o.Cookie.Name = "mycookie";
-        //o.Cookie.Path = "/test"; 
-        o.Cookie.HttpOnly = false;
+        o.Cookie.Domain = ".company.local";
     });
 
-var app = builder.Build();
-app.UseAuthentication();
-app.UseStaticFiles();
-app.MapDefaultControllerRoute();
 
-app.MapGet("/", () => "Hello world");
 
-app.MapPost("/login",  async (HttpContext ctx) =>
+
+
+
+
+var app =  builder.Build();
+
+app.MapGet("/", () => "Hello world Identity");
+
+//secure route
+
+app.MapGet("/protected", () => "secure content").RequireAuthorization();
+
+
+
+
+app.MapGet("login", (HttpContext ctx) =>
 {
+    ctx.SignInAsync(new ClaimsPrincipal(new[]
+    {
+        new ClaimsIdentity(new List<Claim>()
+        {
+            new Claim(ClaimTypes.NameIdentifier,Guid.NewGuid().ToString())
+        },CookieAuthenticationDefaults.AuthenticationScheme)
+    }));
 
 
-    await ctx.SignInAsync("Default", new ClaimsPrincipal(
-               new ClaimsIdentity(
-                   new Claim[]
-                   {
-                        new Claim(ClaimTypes.NameIdentifier,Guid.NewGuid().ToString())
-                   }, "Default"
 
-                   )
-
-
-               ));
     return "ok";
-
-
 });
+
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+
 app.Run();
