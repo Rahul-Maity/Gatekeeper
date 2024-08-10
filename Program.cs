@@ -2,6 +2,9 @@
 
 using System.Security.Claims;
 
+using Gatekeeper;
+using Gatekeeper.Handler;
+
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
@@ -12,65 +15,42 @@ using StackExchange.Redis;
 var builder = WebApplication.CreateBuilder(args);
 
 
-#region Data-Protection
 
-//below configuration aimed for sharing keys to use already setup cookie in localhost in other instances
-
-var con = "127.0.0.1:5263";
-
-var redis = ConnectionMultiplexer.Connect(con);
+builder.Services.AddAuthentication("cookie")
+    .AddCookie("cookie");
 
 
-builder.Services.AddDataProtection()
-    .PersistKeysToStackExchangeRedis(redis,"DataProtection-Key")
-    .SetApplicationName("unique");
+var app = builder.BuildWithSpa();
+
+#region EndPoints setup
+
+var apiEndpoints = app.MapGroup("/api");
+
+apiEndpoints.MapGet("/", () => "hello world");
+
+
+apiEndpoints.MapGet("/user", (ClaimsPrincipal user) =>
+{
+    user.Claims.ToDictionary(x => x.Type, x => x.Value);
+});
+
+
+apiEndpoints.MapGet("/login",(LoginForm form)=>LoginHandler.HandleLogin(form) );
+
+apiEndpoints.MapGet("register", () => "todo");
+
+apiEndpoints.MapGet("logout", () => Results.SignOut(authenticationSchemes: new List<string>() { "cookie" }));
+
 
 
 #endregion
 
-builder.Services.AddAuthorization();
-
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, o =>
-    {
-        o.Cookie.Domain = ".company.local";
-    });
-
-
-
-
-
-
-
-var app =  builder.Build();
-
-app.MapGet("/", () => "Hello world Identity");
-
-//secure route
-
-app.MapGet("/protected", () => "secure content").RequireAuthorization();
-
-
-
-
-app.MapGet("login", (HttpContext ctx) =>
-{
-    ctx.SignInAsync(new ClaimsPrincipal(new[]
-    {
-        new ClaimsIdentity(new List<Claim>()
-        {
-            new Claim(ClaimTypes.NameIdentifier,Guid.NewGuid().ToString())
-        },CookieAuthenticationDefaults.AuthenticationScheme)
-    }));
-
-
-
-    return "ok";
-});
-
-
-app.UseAuthentication();
-app.UseAuthorization();
-
-
 app.Run();
+
+
+
+public class LoginForm
+{
+    public string Username { get; set; }
+    public string Password { get; set; }
+}
