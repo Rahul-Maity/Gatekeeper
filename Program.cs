@@ -19,6 +19,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddAuthentication("cookie")
     .AddCookie("cookie");
 
+builder.Services.AddAuthorization();
+
+
 
 var app = builder.BuildWithSpa();
 
@@ -31,21 +34,21 @@ apiEndpoints.MapGet("/", () => "hello world");
 
 apiEndpoints.MapGet("/user", (ClaimsPrincipal user) =>
 {
-    user.Claims.ToDictionary(x => x.Type, x => x.Value);
+    user.Claims.ToDictionary(x => x.Type, x => x.Value);    
 });
 
 
-apiEndpoints.MapGet("/login",(LoginForm form)=>LoginHandler.HandleLogin(form) );
+apiEndpoints.MapPost("/login",(LoginForm form)=>LoginHandler.HandleLogin(form) );
 
-apiEndpoints.MapGet("register", () => "todo");
+apiEndpoints.MapPost("register", () => "todo");
 
-apiEndpoints.MapGet("logout", () => Results.SignOut(authenticationSchemes: new List<string>() { "cookie" }));
+apiEndpoints.MapGet("logout", () => Results.SignOut(authenticationSchemes: new List<string>() { "cookie" })).RequireAuthorization();
 
 
 
 #endregion
 
-app.Run();
+app.Run();  
 
 
 
